@@ -16,13 +16,35 @@ export const getThirdwebChain = (chainId: number) => {
   };
 
   const rpc = IS_ALCHEMY_VALID ? alchemyUrls[chainId] : undefined;
-  if (rpc) {
-      return {
-          id: chainId,
-          rpc: rpc
-      } as const;
-  }
-  return { id: chainId } as const;
+  
+  // Define basic metadata to avoid unnecessary network calls
+  const metadata: Record<number, any> = {
+    1: { name: "Ethereum", symbol: "ETH", explorer: "https://etherscan.io" },
+    137: { name: "Polygon", symbol: "POL", explorer: "https://polygonscan.com" },
+    8453: { name: "Base", symbol: "ETH", explorer: "https://basescan.org" },
+    42161: { name: "Arbitrum", symbol: "ETH", explorer: "https://arbiscan.io" },
+    10: { name: "Optimism", symbol: "ETH", explorer: "https://optimistic.etherscan.io" },
+    43114: { name: "Avalanche", symbol: "AVAX", explorer: "https://snowtrace.io" },
+    56: { name: "BSC", symbol: "BNB", rpc: "https://rpc.ankr.com/bsc", explorer: "https://bscscan.com" }
+  };
+
+  const info = metadata[chainId] || {};
+
+  return { 
+      id: chainId,
+      rpc: rpc || info.rpc || `https://${chainId}.rpc.thirdweb.com`, // Fallback to thirdweb rpc if no alchemy/hardcoded
+      nativeCurrency: {
+        name: info.symbol || "Native",
+        symbol: info.symbol || "Native",
+        decimals: 18
+      },
+      blockExplorers: info.explorer ? [
+        {
+          name: "Main",
+          url: info.explorer
+        }
+      ] : undefined
+  } as const;
 };
 
 export const client = createThirdwebClient({

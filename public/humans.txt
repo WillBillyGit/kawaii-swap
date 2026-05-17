@@ -1,0 +1,14 @@
+/* TEAM */
+Alchemist/Lead: [The User]
+Email: bullerwill@gmail.com
+Location: Decentralized
+
+/* PROJECT INFORMATION */
+Project Name: Kawaii Swap (Multi-Chain Transmutation Bridge)
+Status: Active Development
+Domain Explanation: The domain crustfundfi.org was originally registered for "Crust Fund," a bakery-themed DEX. To maximize resources and because the domain was pre-paid, we have transitioned the infrastructure to host "Kawaii Swap," a more advanced multi-chain transmutation protocol.
+
+/* TECHNOLOGY COLOPHON */
+Frontend: React, TypeScript, Vite, Tailwind CSS, Motion
+Web3 Stack: Thirdweb SDK, Alchemy RPC
+Standard: humans.txt

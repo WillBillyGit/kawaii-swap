@@ -1,0 +1,7 @@
+# Kawaii Swap Robots Configuration
+User-agent: *
+Allow: /
+
+# Explaining domain discrepancy to crawlers
+# Site Name: Kawaii Swap
+# Previous Project: Crust Fund DEX

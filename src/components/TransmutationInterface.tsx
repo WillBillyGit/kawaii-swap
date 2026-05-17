@@ -24,8 +24,8 @@ const VAULT_ADDRESSES: Record<number, string> = {
 };
 
 const INITIAL_TOKENS: Token[] = [
-  { address: NATIVE_TOKEN_ADDRESS, name: "Ethereum", symbol: "ETH", decimals: 18, chainId: 1 },
   { address: "0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0", name: "Polygon Ecosystem Token", symbol: "POL", decimals: 18, chainId: 137 },
+  { address: NATIVE_TOKEN_ADDRESS, name: "Ethereum", symbol: "ETH", decimals: 18, chainId: 1 },
   { address: "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7", name: "Wrapped AVAX", symbol: "WAVAX", decimals: 18, chainId: 43114 },
 ];
 
@@ -52,7 +52,7 @@ export default function TransmutationInterface() {
   // Use a fallback contract to prevent hooks from crashing when activeChain or vaultAddress is missing
   const contract = getContract({
     client,
-    chain: defineChain(getThirdwebChain(activeChain?.id || 1)),
+    chain: defineChain(getThirdwebChain(activeChain?.id || 137)),
     address: vaultAddress || "0x0000000000000000000000000000000000000000",
   });
 

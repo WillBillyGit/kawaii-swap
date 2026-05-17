@@ -1,0 +1,4 @@
+Contact: mailto:bullerwill@gmail.com
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: en
+Description: Kawaii Swap Security Policy. We value the security of our users. If you find a vulnerability, please report it via email.
