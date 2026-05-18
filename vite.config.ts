@@ -15,6 +15,32 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      target: 'esnext',
+      minify: 'esbuild',
+      cssMinify: true,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-web3': ['thirdweb', 'viem', 'wagmi', '@tanstack/react-query'],
+            'vendor-ui': ['motion', 'lucide-react'],
+          },
+        },
+      },
+      chunkSizeWarningLimit: 1000,
+    },
+    optimizeDeps: {
+      include: [
+        'react', 
+        'react-dom', 
+        'thirdweb', 
+        'viem', 
+        'wagmi', 
+        'motion', 
+        'lucide-react'
+      ],
+    },
     server: {
       port: 3000,
       host: '0.0.0.0',

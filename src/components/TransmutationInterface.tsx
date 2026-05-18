@@ -1,7 +1,9 @@
 import { useState, ChangeEvent, useEffect } from "react";
 import { motion } from "motion/react";
-import { Sparkles, Zap, Coins, Info, Plus, ShieldCheck, ArrowRightLeft, Loader2 } from "lucide-react";
-import { PayEmbed, useActiveAccount, useActiveWalletChain, useReadContract, useSendTransaction } from "thirdweb/react";
+import { Sparkles, Zap, Coins, Info, Plus, ShieldCheck, ArrowRightLeft, Loader2, Wallet } from "lucide-react";
+import { PayEmbed, useActiveAccount, useActiveWalletChain, useSendTransaction, useSwitchActiveWalletChain, useConnectModal } from "thirdweb/react";
+import { toast } from "sonner";
+import { useReadContract as useWagmiReadContract } from "wagmi";
 import { client, getThirdwebChain } from "../lib/web3";
 import { ethereum } from "thirdweb/chains";
 import { NATIVE_TOKEN_ADDRESS, getContract, prepareContractCall, toEther, toWei, readContract, defineChain } from "thirdweb";
@@ -13,6 +15,17 @@ type Token = {
   decimals: number;
   chainId: number;
 };
+
+const SUPPORTED_NETWORKS = [
+  { id: 1, name: "Ethereum", icon: "🌐" },
+  { id: 137, name: "Polygon", icon: "🟣" },
+  { id: 8453, name: "Base", icon: "🔵" },
+  { id: 42161, name: "Arbitrum", icon: "🟦" },
+  { id: 10, name: "Optimism", icon: "🔴" },
+  { id: 43114, name: "Avalanche", icon: "🔺" },
+  { id: 56, name: "BSC", icon: "🟡" },
+  { id: 11155111, name: "Sepolia", icon: "🧪" },
+];
 
 const VAULT_ADDRESSES: Record<number, string> = {
   137: "0xB961BC2BB845821993E7A243E2Ef46aF491F2754",
@@ -29,6 +42,30 @@ const INITIAL_TOKENS: Token[] = [
   { address: "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7", name: "Wrapped AVAX", symbol: "WAVAX", decimals: 18, chainId: 43114 },
 ];
 
+const VAULT_ABI = [
+  {
+    name: "essenceBalance",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "balance", type: "uint256" }],
+  },
+  {
+    name: "getVirtualEssence",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "balance", type: "uint256" }],
+  },
+  {
+    name: "getTributeRate",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "rate", type: "uint256" }],
+  },
+] as const;
+
 export default function TransmutationInterface() {
   const [activeTab, setActiveTab] = useState<'transmute' | 'vault' | 'tokens'>('transmute');
   const [tokens, setTokens] = useState<Token[]>(INITIAL_TOKENS);
@@ -44,7 +81,31 @@ export default function TransmutationInterface() {
   
   const activeAccount = useActiveAccount();
   const activeChain = useActiveWalletChain();
+  const switchChain = useSwitchActiveWalletChain();
+  const { connect } = useConnectModal();
   
+  const [targetChainId, setTargetChainId] = useState<number>(activeChain?.id || 1);
+
+  useEffect(() => {
+    if (activeChain) {
+      setTargetChainId(activeChain.id);
+    }
+  }, [activeChain]);
+
+  const handleSwitchNetwork = async (chainId: number) => {
+    try {
+      await switchChain(defineChain(getThirdwebChain(chainId)));
+      toast.success(`Successfully transitioned to ${SUPPORTED_NETWORKS.find(n => n.id === chainId)?.name || 'the new realm'}`);
+    } catch (error: any) {
+      console.error("Failed to switch network:", error);
+      if (error?.message?.includes("User rejected")) {
+        toast.error("Realm transition denied. Please approve in your wallet.");
+      } else {
+        toast.error("The portal is unstable. Alchemy or Thirdweb authentication may be required.");
+      }
+    }
+  };
+
   const nativeSymbol = activeChain?.nativeCurrency?.symbol || "ETH";
 
   const vaultAddress = activeChain ? VAULT_ADDRESSES[activeChain.id] : undefined;
@@ -56,30 +117,44 @@ export default function TransmutationInterface() {
     address: vaultAddress || "0x0000000000000000000000000000000000000000",
   });
 
-  const { data: essenceBalance, isLoading: isLoadingEssence } = useReadContract({
-    contract,
-    method: "function essenceBalance(address) view returns (uint256)",
-    params: [activeAccount?.address || ""],
-    queryOptions: { enabled: !!vaultAddress && !!activeAccount }
+  // Use wagmi for reading to bypass thirdweb auth rejections and utilize alchemy directly
+  const { data: essenceBalance, isLoading: isLoadingEssence } = useWagmiReadContract({
+    address: vaultAddress as `0x${string}`,
+    abi: VAULT_ABI,
+    functionName: "essenceBalance",
+    args: [activeAccount?.address as `0x${string}`],
+    query: {
+      enabled: !!vaultAddress && !!activeAccount?.address,
+    }
   });
 
-  const { data: virtualEssence, isLoading: isLoadingVirtual } = useReadContract({
-    contract,
-    method: "function getVirtualEssence(address) view returns (uint256)",
-    params: [activeAccount?.address || ""],
-    queryOptions: { enabled: !!vaultAddress && !!activeAccount }
+  const { data: virtualEssence, isLoading: isLoadingVirtual } = useWagmiReadContract({
+    address: vaultAddress as `0x${string}`,
+    abi: VAULT_ABI,
+    functionName: "getVirtualEssence",
+    args: [activeAccount?.address as `0x${string}`],
+    query: {
+      enabled: !!vaultAddress && !!activeAccount?.address,
+    }
   });
 
-  const { data: tributeRate, isLoading: isLoadingTribute } = useReadContract({
-    contract,
-    method: "function getTributeRate(address) view returns (uint256)",
-    params: [activeAccount?.address || ""],
-    queryOptions: { enabled: !!vaultAddress && !!activeAccount }
+  const { data: tributeRate, isLoading: isLoadingTribute } = useWagmiReadContract({
+    address: vaultAddress as `0x${string}`,
+    abi: VAULT_ABI,
+    functionName: "getTributeRate",
+    args: [activeAccount?.address as `0x${string}`],
+    query: {
+      enabled: !!vaultAddress && !!activeAccount?.address,
+    }
   });
 
   const { mutate: sendTx, isPending: isTxPending } = useSendTransaction();
 
   const handleResonate = async () => {
+    if (!activeAccount) {
+      toast.error("Identify Required: Please connect your alchemist wallet");
+      return;
+    }
     if (!vaultAddress || !vaultAmount) return;
     setIsResonating(true);
     try {
@@ -88,13 +163,30 @@ export default function TransmutationInterface() {
         method: "function manifest() payable",
         value: toWei(vaultAmount),
       });
-      await sendTx(tx);
+      await sendTx(tx, {
+        onSuccess: () => {
+          toast.success("Essence Manifested! The transmutation begins.");
+          setVaultAmount("");
+        },
+        onError: (err: any) => {
+          console.error("Resonate error:", err);
+          if (err?.message?.includes("User rejected")) {
+             toast.error("Manifestation cancelled by user.");
+          } else {
+             toast.error("Manifestation failed: Authentication or Void Error");
+          }
+        }
+      });
     } finally {
       setIsResonating(false);
     }
   };
 
   const handleAscend = async () => {
+    if (!activeAccount) {
+      toast.error("Identify Required: Please connect your alchemist wallet");
+      return;
+    }
     if (!vaultAddress || !vaultAmount) return;
     setIsAscending(true);
     try {
@@ -103,7 +195,20 @@ export default function TransmutationInterface() {
         method: "function dissolve(uint256)",
         params: [toWei(vaultAmount)],
       });
-      await sendTx(tx);
+      await sendTx(tx, {
+        onSuccess: () => {
+          toast.success("Aether Dissolved successfully.");
+          setVaultAmount("");
+        },
+        onError: (err: any) => {
+          console.error("Ascend error:", err);
+          if (err?.message?.includes("User rejected")) {
+            toast.error("Dissolve sequence aborted.");
+          } else {
+            toast.error("Dissolve failed: Realm Instability");
+          }
+        }
+      });
     } finally {
       setIsAscending(false);
     }
@@ -132,6 +237,8 @@ export default function TransmutationInterface() {
         address: newTokenAddress,
       });
 
+      toast.info("Gleaning token essence from the blockchain...");
+      
       const [tokenName, tokenSymbol, tokenDecimals] = await Promise.all([
         readContract({
           contract: tokenContract,
@@ -161,13 +268,32 @@ export default function TransmutationInterface() {
       setTokens(prev => [...prev, newToken]);
       setNewTokenAddress("");
       setShowAddToken(false);
+      toast.success(`${tokenSymbol} has been recorded in the Grimoire.`);
     } catch (error) {
       console.error("Failed to fetch token metadata:", error);
       setTokenError("Failed to fetch token data");
+      toast.error("Failed to glean token essence. Verify the address.");
     } finally {
       setIsAddingToken(false);
     }
   };
+
+  useEffect(() => {
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      // Gracefully catch thirdweb auth errors which often happen in preview environments
+      if (event.reason === "Authentication required" || 
+          (typeof event.reason === 'object' && event.reason?.message === "Authentication required")) {
+        event.preventDefault();
+        console.warn("Thirdweb auth failed: This usually means the current domain is not whitelisted in your Thirdweb dashboard.");
+        toast.error("Identity Verification Unstable", {
+          description: "Alchemy or Thirdweb authentication failed. Please check domain whitelisting or try in a new tab.",
+          duration: 6000
+        });
+      }
+    };
+    window.addEventListener("unhandledrejection", handleRejection);
+    return () => window.removeEventListener("unhandledrejection", handleRejection);
+  }, []);
 
   return (
     <div className="max-w-md mx-auto mt-8 flex flex-col gap-6 relative px-4 pb-20">
@@ -176,13 +302,61 @@ export default function TransmutationInterface() {
         <motion.img 
           src="/mamakt.jpg"
           alt="Kawaii Swap Multi-Chain Transmutation Bridge"
-          className="w-full max-w-sm mx-auto rounded-2xl shadow-2xl"
+          className="w-[392.991px] h-[216.616px] mx-auto rounded-2xl shadow-2xl object-cover"
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
           referrerPolicy="no-referrer"
         />
       </div>
+      
+      {/* Network Selector */}
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl p-4 space-y-4"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-kawaii-blue/20 flex items-center justify-center text-kawaii-blue">
+              <ShieldCheck size={16} />
+            </div>
+            <span className="text-xs font-bold uppercase tracking-wider text-white/60">Realm Synchronizer</span>
+          </div>
+          {activeChain && (
+            <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
+              SUPPORTED_NETWORKS.some(n => n.id === activeChain.id) 
+                ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                : 'bg-red-500/20 text-red-400 border border-red-500/30'
+            }`}>
+              {activeChain.name}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <select 
+            className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-kawaii-pink transition-all appearance-none cursor-pointer"
+            value={targetChainId}
+            onChange={(e) => setTargetChainId(Number(e.target.value))}
+          >
+            {SUPPORTED_NETWORKS.map(network => (
+              <option key={network.id} value={network.id}>
+                {network.icon} {network.name}
+              </option>
+            ))}
+          </select>
+          
+          {activeAccount && activeChain?.id !== targetChainId && (
+            <button 
+              onClick={() => handleSwitchNetwork(targetChainId)}
+              className="px-4 py-2.5 bg-linear-to-r from-kawaii-pink to-kawaii-blue text-kawaii-purple text-xs font-bold rounded-xl active:scale-95 transition-all shadow-lg shadow-kawaii-pink/20"
+            >
+              Switch Realm
+            </button>
+          )}
+        </div>
+      </motion.div>
 
       {/* Identity Banner */}
       <motion.div 
@@ -241,9 +415,32 @@ export default function TransmutationInterface() {
           </button>
         </div>
 
-        <div className="p-4 bg-white/5 min-h-[420px]">
-          {activeTab === 'transmute' ? (
-            activeAccount && activeChain ? (
+        <div className="p-4 bg-white/5 min-h-[420px] flex flex-col">
+          {!activeAccount ? (
+             <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 py-12 px-6">
+                <motion.div 
+                  initial={{ rotate: -10, scale: 0.9 }}
+                  animate={{ rotate: 0, scale: 1 }}
+                  transition={{ repeat: Infinity, repeatType: "reverse", duration: 2 }}
+                  className="w-24 h-24 rounded-full bg-kawaii-pink/10 flex items-center justify-center text-kawaii-pink shadow-[0_0_50px_rgba(255,183,226,0.1)]"
+                >
+                  <Wallet size={48} />
+                </motion.div>
+                <div className="space-y-2">
+                  <h3 className="font-black text-2xl tracking-tight text-white">Identity Missing</h3>
+                  <p className="text-white/40 text-sm max-w-[240px] leading-relaxed">
+                    The Circle of Transmutation requires an Alchemist. Connect your wallet to begin.
+                  </p>
+                </div>
+                <button 
+                  onClick={() => connect({ client })}
+                  className="w-full bg-linear-to-r from-kawaii-pink to-kawaii-blue text-kawaii-purple py-4 rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all shadow-xl shadow-kawaii-pink/20"
+                >
+                  Awaken Alchemist Wallet
+                </button>
+             </div>
+          ) : activeTab === 'transmute' ? (
+            activeChain ? (
               <PayEmbed 
                 client={client}
                 theme="dark"
@@ -268,8 +465,8 @@ export default function TransmutationInterface() {
                   <Zap size={32} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg">Circle of Transmutation</h3>
-                  <p className="text-white/40 text-sm">Please connect your identity to initiate flow</p>
+                  <h3 className="font-bold text-lg">Realm Desynchronized</h3>
+                  <p className="text-white/40 text-sm">Please select a realm above to synchronize</p>
                 </div>
               </div>
             )
@@ -285,6 +482,12 @@ export default function TransmutationInterface() {
                   <Info size={16} className="text-red-400 mt-1 shrink-0" />
                   <div className="text-[10px] uppercase font-bold text-red-300 leading-tight">
                     Void Detected: The Aether Vault is not currently manifested on <span className="text-white">{activeChain.name}</span>. Please switch to a supported realm.
+                    <button 
+                      onClick={() => handleSwitchNetwork(137)}
+                      className="mt-2 block text-kawaii-gold hover:underline cursor-pointer"
+                    >
+                      Manifest on Polygon Realm →
+                    </button>
                   </div>
                   <button 
                     onClick={() => setDismissWarning(true)}

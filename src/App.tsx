@@ -2,6 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
+import { Toaster } from "sonner";
 import GalaxyBackground from "./components/GalaxyBackground";
 import WalletConnector from "./components/WalletConnector";
 import TransmutationInterface from "./components/TransmutationInterface";
@@ -10,6 +11,7 @@ import DodoBirds from "./components/DodoBirds";
 export default function App() {
   return (
     <main className="min-h-screen relative font-sans selection:bg-kawaii-pink/30">
+      <Toaster theme="dark" position="top-right" closeButton richColors />
       <GalaxyBackground />
       <DodoBirds />
       
